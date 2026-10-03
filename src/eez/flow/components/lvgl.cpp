@@ -1296,6 +1296,29 @@ ACTION_START(animSpringY)
     playAnimationSpring(obj, start, end, delay, time, instant, repeatCount, playback, stiffness, damping, velocity, anim_callback_set_y);
 ACTION_END
 
+// ---------------------------------------------------------------------------
+// objTextTransition (IWILLTBEST fork, action id 67): install a style
+// transition on the object so subsequent CHECKED-state changes animate
+// LV_STYLE_TEXT_COLOR (Figma-like color fade following tab switches).
+// ---------------------------------------------------------------------------
+struct TextTransState {
+    lv_style_prop_t props[2];
+    lv_style_transition_dsc_t dsc;
+};
+static TextTransState s_text_trans[8];
+static unsigned s_text_trans_next;
+
+ACTION_START(objTextTransition)
+    WIDGET_PROP(obj);
+    INT32_PROP(time);
+    TextTransState *st = &s_text_trans[s_text_trans_next];
+    s_text_trans_next = (s_text_trans_next + 1) % (sizeof(s_text_trans) / sizeof(s_text_trans[0]));
+    st->props[0] = LV_STYLE_TEXT_COLOR;
+    st->props[1] = LV_STYLE_PROP_INV;
+    lv_style_transition_dsc_init(&st->dsc, st->props, lv_anim_path_ease_out, time, 0);
+    lv_obj_set_style_transition_dsc(obj, &st->dsc, LV_PART_MAIN, LV_STATE_DEFAULT);
+ACTION_END
+
 ACTION_START(createScreen)
     SCREEN_PROP(screen);
     eez_flow_create_screen(screen);
@@ -1462,7 +1485,8 @@ static ActionType actions[] = {
     /* 61 */ &objGetDisplayX,
     /* 62 */ &objGetDisplayY,
     /* 65 */ &animSpring,
-    /* 66 */ &animSpringY
+    /* 66 */ &animSpringY,
+    /* 67 */ &objTextTransition
 };
 
 ////////////////////////////////////////////////////////////////////////////////
