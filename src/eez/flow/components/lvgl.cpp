@@ -1315,8 +1315,8 @@ ACTION_START(objTextTransition)
     s_text_trans_next = (s_text_trans_next + 1) % (sizeof(s_text_trans) / sizeof(s_text_trans[0]));
     st->props[0] = LV_STYLE_TEXT_COLOR;
     st->props[1] = LV_STYLE_PROP_INV;
-    lv_style_transition_dsc_init(&st->dsc, st->props, lv_anim_path_ease_out, time, 0);
-    lv_obj_set_style_transition_dsc(obj, &st->dsc, LV_PART_MAIN, LV_STATE_DEFAULT);
+    lv_style_transition_dsc_init(&st->dsc, st->props, lv_anim_path_ease_out, time, 0, nullptr);
+    lv_obj_set_style_transition(obj, &st->dsc, LV_PART_MAIN, LV_STATE_DEFAULT);
 ACTION_END
 
 ACTION_START(createScreen)
