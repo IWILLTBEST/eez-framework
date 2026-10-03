@@ -949,6 +949,7 @@ static void applyEezClipChildren(lv_obj_t * obj, int32_t flag) {
     if (flag == EEZ_LVGL_FLAG_CLIP_CHILDREN) {
         lv_obj_allocate_spec_attr(obj);
         obj->spec_attr->layer_type = LV_LAYER_TYPE_SIMPLE;
+        lv_obj_invalidate(obj);  // re-render so the new layer takes effect
     }
 }
 
