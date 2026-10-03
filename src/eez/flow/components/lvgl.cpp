@@ -1296,87 +1296,7 @@ ACTION_START(animSpringY)
     playAnimationSpring(obj, start, end, delay, time, instant, repeatCount, playback, stiffness, damping, velocity, anim_callback_set_y);
 ACTION_END
 
-// ---------------------------------------------------------------------------
-// objTextTransition (IWILLTBEST fork, action id 67): install a style
-// transition on the object so subsequent CHECKED-state changes animate
-// LV_STYLE_TEXT_COLOR (Figma-like color fade following tab switches).
-// ---------------------------------------------------------------------------
-struct TextTransState {
-    lv_style_prop_t props[2];
-    lv_style_transition_dsc_t dsc;
-};
-static TextTransState s_text_trans[8];
-static unsigned s_text_trans_next;
 
-// IWILLTBEST fork: animate text_color as an int (0xRRGGBB). On completion
-// the local style is removed so CHECKED-state styles take over again.
-static void anim_callback_set_text_color(void * var, int32_t v) {
-    lv_obj_set_style_text_color((lv_obj_t *)var, lv_color_hex(v & 0xFFFFFF), LV_PART_MAIN);
-}
-
-static void anim_text_color_completed_cb(lv_anim_t * a) {
-    lv_obj_t * obj = (lv_obj_t *)lv_anim_get_user_data(a);
-    if (obj) lv_obj_remove_local_style_prop(obj, LV_STYLE_TEXT_COLOR, LV_PART_MAIN);
-}
-
-static void playAnimationTextColor(lv_obj_t * obj,
-    int32_t start,
-    int32_t end,
-    int32_t delay,
-    int32_t time,
-    bool relative,
-    bool instant,
-    int32_t path,
-    int32_t repeatCount,
-    bool playback
-) {
-    lv_anim_t anim;
-    lv_anim_init(&anim);
-    lv_anim_set_time(&anim, time);
-    lv_anim_set_user_data(&anim, obj);
-    lv_anim_set_var(&anim, obj);
-    lv_anim_set_exec_cb(&anim, anim_callback_set_text_color);
-    lv_anim_set_values(&anim, start, end);
-    lv_anim_set_path_cb(&anim, anim_path_callbacks[path]);
-    lv_anim_set_delay(&anim, delay);
-    lv_anim_set_early_apply(&anim, instant ? true : false);
-    if (relative) {
-        // relative makes no sense for colors: the get hook would need to
-        // read the current color; start is expected to be absolute.
-    }
-    lv_anim_set_repeat_count(&anim, repeatCount);
-    if (playback) {
-#if LVGL_VERSION_MAJOR >= 9
-        lv_anim_set_playback_duration(&anim, time);
-#endif
-    }
-    lv_anim_set_completed_cb(&anim, anim_text_color_completed_cb);
-    lv_anim_start(&anim);
-}
-
-ACTION_START(animTextColor)
-    WIDGET_PROP(obj);
-    INT32_PROP(start);
-    INT32_PROP(end);
-    INT32_PROP(delay);
-    INT32_PROP(time);
-    BOOL_PROP(instant);
-    INT32_PROP(path);
-    INT32_PROP(repeatCount);
-    BOOL_PROP(playback);
-    playAnimationTextColor(obj, start, end, delay, time, false, instant, path, repeatCount, playback);
-ACTION_END
-
-ACTION_START(objTextTransition)
-    WIDGET_PROP(obj);
-    INT32_PROP(time);
-    TextTransState *st = &s_text_trans[s_text_trans_next];
-    s_text_trans_next = (s_text_trans_next + 1) % (sizeof(s_text_trans) / sizeof(s_text_trans[0]));
-    st->props[0] = LV_STYLE_TEXT_COLOR;
-    st->props[1] = LV_STYLE_PROP_INV;
-    lv_style_transition_dsc_init(&st->dsc, st->props, lv_anim_path_ease_out, time, 0, nullptr);
-    lv_obj_set_style_transition(obj, &st->dsc, LV_PART_MAIN, LV_STATE_DEFAULT);
-ACTION_END
 
 ACTION_START(createScreen)
     SCREEN_PROP(screen);
@@ -1545,8 +1465,7 @@ static ActionType actions[] = {
     /* 62 */ &objGetDisplayY,
     /* 65 */ &animSpring,
     /* 66 */ &animSpringY,
-    /* 67 */ &objTextTransition,
-    /* 68 */ &animTextColor
+    /* 67 */ &animTextColor
 };
 
 ////////////////////////////////////////////////////////////////////////////////
