@@ -974,7 +974,11 @@ ACTION_END
 // tab-to-tab transition fades from whatever is on screen. The final color
 // persists as a local style (it becomes the new "current color").
 static void anim_callback_set_text_color(void * var, int32_t v) {
-    lv_obj_set_style_text_color((lv_obj_t *)var, lv_color_hex(v & 0xFFFFFF), LV_PART_MAIN);
+    // clamp to the 0xRRGGBB domain: easing overshoot (or a negative
+    // intermediate) would otherwise wrap into a random hue after the mask
+    if (v < 0x000000) v = 0x000000;
+    if (v > 0xFFFFFF) v = 0xFFFFFF;
+    lv_obj_set_style_text_color((lv_obj_t *)var, lv_color_hex(((uint32_t)v) & 0xFFFFFF), LV_PART_MAIN);
 }
 
 static int32_t anim_callback_get_text_color(lv_anim_t * a) {
