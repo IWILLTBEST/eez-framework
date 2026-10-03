@@ -168,7 +168,24 @@ static int32_t anim_path_spring(const lv_anim_t *a) {
     if (t < 0) t = 0;
     double x = 1.0 - exp(-zeta * w0 * t) *
                         (cos(wd * t) + ((zeta * w0 - st->velocity) / wd) * sin(wd * t));
-    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * x);
+    int32_t v = a->start_value + (int32_t)((double)(a->end_value - a->start_value) * x);
+
+    // Figma-frame clip semantics: the animated object never leaves its
+    // parent's content area (LVGL 9 has no per-object clipping, so the
+    // spring overshoot is clamped to the parent bounds — visually this is
+    // identical to Figma frames, which clip overflowing content).
+    lv_obj_t *parent = lv_obj_get_parent(a->var);
+    if (parent) {
+        int32_t pad_l = lv_obj_get_style_pad_left(parent, LV_PART_MAIN);
+        int32_t pad_r = lv_obj_get_style_pad_right(parent, LV_PART_MAIN);
+        int32_t pad_t = lv_obj_get_style_pad_top(parent, LV_PART_MAIN);
+        int32_t pad_b = lv_obj_get_style_pad_bottom(parent, LV_PART_MAIN);
+        int32_t lo = lv_obj_get_x(parent) + pad_l;
+        int32_t hi = lv_obj_get_x(parent) + lv_obj_get_width(parent) - pad_r - lv_obj_get_width(a->var);
+        if (v < lo) v = lo;
+        if (v > hi) v = hi;
+    }
+    return v;
 }
 
 int32_t (*anim_path_callbacks[])(const lv_anim_t *a) = {
