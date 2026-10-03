@@ -1524,7 +1524,8 @@ static ActionType actions[] = {
     /* 61 */ &objGetDisplayX,
     /* 62 */ &objGetDisplayY,
     /* 65 */ &animSpring,
-    /* 66 */ &animSpringY
+    /* 66 */ &animSpringY,
+    /* 67 */ &animTextColor
 };
 
 ////////////////////////////////////////////////////////////////////////////////
