@@ -24,6 +24,13 @@
 #include <eez/flow/hooks.h>
 #include <eez/flow/lvgl_api.h>
 
+// IWILLTBEST fork: access to spec_attr->layer_type for the clip-children
+// feature (LVGL 9.4 has no public per-object clipping API)
+#if LVGL_VERSION_MAJOR >= 9
+#include "lvgl/src/core/lv_obj_private.h"
+#include "lvgl/src/core/lv_obj_style_private.h"
+#endif
+
 #include <eez/flow/components/lvgl.h>
 
 #if defined(EEZ_FOR_LVGL)
@@ -933,10 +940,26 @@ ACTION_START(objSetFlagHidden)
     else lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
 ACTION_END
 
+// IWILLTBEST fork: EEZ_CLIP_CHILDREN (bit 21, unused by LVGL) is implemented
+// as a SIMPLE layer, which renders the children clipped to the object's
+// bounds — LVGL 9 renders children unclipped by default and has no public
+// per-object clipping API.
+#define EEZ_LVGL_FLAG_CLIP_CHILDREN (1L << 21)
+static void applyEezClipChildren(lv_obj_t * obj, int32_t flag) {
+    if (flag == EEZ_LVGL_FLAG_CLIP_CHILDREN) {
+        lv_obj_allocate_spec_attr(obj);
+        obj->spec_attr->layer_type = LV_LAYER_TYPE_SIMPLE;
+    }
+}
+
 ACTION_START(objAddFlag)
     WIDGET_PROP(obj);
     INT32_PROP(flag);
-    lv_obj_add_flag(obj, (lv_obj_flag_t)flag);
+    if (flag == EEZ_LVGL_FLAG_CLIP_CHILDREN) {
+        applyEezClipChildren(obj, flag);
+    } else {
+        lv_obj_add_flag(obj, (lv_obj_flag_t)flag);
+    }
 ACTION_END
 
 ACTION_START(objClearFlag)
