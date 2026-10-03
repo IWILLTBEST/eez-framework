@@ -969,15 +969,18 @@ ACTION_START(objClearFlag)
     lv_obj_clear_flag(obj, (lv_obj_flag_t)flag);
 ACTION_END
 
-// IWILLTBEST fork: animate text_color as an int (0xRRGGBB). On completion
-// the local style is removed so CHECKED-state styles take over again.
+// IWILLTBEST fork: animate text_color as an int (0xRRGGBB). With relative
+// set, the animation starts from the object's current color, so any
+// tab-to-tab transition fades from whatever is on screen. The final color
+// persists as a local style (it becomes the new "current color").
 static void anim_callback_set_text_color(void * var, int32_t v) {
     lv_obj_set_style_text_color((lv_obj_t *)var, lv_color_hex(v & 0xFFFFFF), LV_PART_MAIN);
 }
 
-static void anim_text_color_completed_cb(lv_anim_t * a) {
-    lv_obj_t * obj = (lv_obj_t *)lv_anim_get_user_data(a);
-    if (obj) lv_obj_remove_local_style_prop(obj, LV_STYLE_TEXT_COLOR, LV_PART_MAIN);
+static int32_t anim_callback_get_text_color(void * var) {
+    lv_color_t c = lv_obj_get_style_text_color((lv_obj_t *)var, LV_PART_MAIN);
+    lv_color32_t c32 = lv_color_to_32(c, 0xFF);
+    return (c32.red << 16) | (c32.green << 8) | c32.blue;
 }
 
 static void playAnimationTextColor(lv_obj_t * obj,
@@ -986,6 +989,7 @@ static void playAnimationTextColor(lv_obj_t * obj,
     int32_t delay,
     int32_t time,
     bool instant,
+    bool relative,
     int32_t path,
     int32_t repeatCount,
     bool playback
@@ -1000,13 +1004,15 @@ static void playAnimationTextColor(lv_obj_t * obj,
     lv_anim_set_path_cb(&anim, anim_path_callbacks[path]);
     lv_anim_set_delay(&anim, delay);
     lv_anim_set_early_apply(&anim, instant ? true : false);
+    if (relative) {
+        lv_anim_set_get_value_cb(&anim, anim_callback_get_text_color);
+    }
     lv_anim_set_repeat_count(&anim, repeatCount);
     if (playback) {
 #if LVGL_VERSION_MAJOR >= 9
         lv_anim_set_playback_duration(&anim, time);
 #endif
     }
-    lv_anim_set_completed_cb(&anim, anim_text_color_completed_cb);
     lv_anim_start(&anim);
 }
 
@@ -1017,10 +1023,11 @@ ACTION_START(animTextColor)
     INT32_PROP(delay);
     INT32_PROP(time);
     BOOL_PROP(instant);
+    BOOL_PROP(relative);
     INT32_PROP(path);
     INT32_PROP(repeatCount);
     BOOL_PROP(playback);
-    playAnimationTextColor(obj, start, end, delay, time, instant, path, repeatCount, playback);
+    playAnimationTextColor(obj, start, end, delay, time, instant, relative, path, repeatCount, playback);
 ACTION_END
 
 ACTION_START(objHasFlag)
