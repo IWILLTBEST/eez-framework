@@ -981,11 +981,10 @@ static void anim_callback_set_text_color(void * var, int32_t v) {
     lv_obj_set_style_text_color((lv_obj_t *)var, lv_color_hex(((uint32_t)v) & 0xFFFFFF), LV_PART_MAIN);
 }
 
-static int32_t anim_callback_get_text_color(lv_anim_t * a) {
-    lv_obj_t * var = (lv_obj_t *)lv_anim_get_user_data(a);
-    lv_color_t c = lv_obj_get_style_text_color(var, LV_PART_MAIN);
+static int32_t read_text_color_hex(lv_obj_t * obj) {
+    lv_color_t c = lv_obj_get_style_text_color(obj, LV_PART_MAIN);
     lv_color32_t c32 = lv_color_to_32(c, 0xFF);
-    return (c32.red << 16) | (c32.green << 8) | c32.blue;
+    return ((int32_t)c32.red << 16) | ((int32_t)c32.green << 8) | (int32_t)c32.blue;
 }
 
 static void playAnimationTextColor(lv_obj_t * obj,
@@ -999,6 +998,13 @@ static void playAnimationTextColor(lv_obj_t * obj,
     int32_t repeatCount,
     bool playback
 ) {
+    // LVGL 9.4's get_value_cb semantics is OFFSET-ADD (start += current,
+    // end += current), which corrupts absolute color targets. Instead we
+    // read the current color here and use plain absolute values.
+    if (relative) {
+        start = read_text_color_hex(obj);
+    }
+
     lv_anim_t anim;
     lv_anim_init(&anim);
     lv_anim_set_time(&anim, time);
@@ -1009,9 +1015,6 @@ static void playAnimationTextColor(lv_obj_t * obj,
     lv_anim_set_path_cb(&anim, anim_path_callbacks[path]);
     lv_anim_set_delay(&anim, delay);
     lv_anim_set_early_apply(&anim, instant ? true : false);
-    if (relative) {
-        lv_anim_set_get_value_cb(&anim, anim_callback_get_text_color);
-    }
     lv_anim_set_repeat_count(&anim, repeatCount);
     if (playback) {
 #if LVGL_VERSION_MAJOR >= 9
