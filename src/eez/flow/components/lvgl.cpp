@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include <eez/core/os.h>
 
 #include <eez/flow/components.h>
@@ -73,13 +74,109 @@ lv_anim_get_value_cb_t anim_get_callbacks[] = {
     anim_callback_get_image_angle
 };
 
+// ---------------------------------------------------------------------------
+// Extra easing curves added by the IWILLTBEST fork (path ids 6-10, appended
+// after the original 0-5 entries so the assets format stays compatible).
+// Formulas are the standard penner-style easing functions; LVGL has no
+// built-ins for these, so they are implemented here as plain functions.
+// ---------------------------------------------------------------------------
+#define BACK_S 1.70158
+
+static int32_t anim_path_back_in(const lv_anim_t *a) {
+    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    if (t > 65536) t = 65536;
+    double u = t / 65536.0;
+    double v = u * u * ((BACK_S + 1) * u - BACK_S);
+    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * v);
+}
+
+static int32_t anim_path_back_out(const lv_anim_t *a) {
+    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    if (t > 65536) t = 65536;
+    double u = t / 65536.0;
+    double v = (u - 1) * (u - 1) * ((BACK_S + 1) * (u - 1) + BACK_S) + 1.0;
+    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * v);
+}
+
+static int32_t anim_path_back_in_out(const lv_anim_t *a) {
+    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    if (t > 65536) t = 65536;
+    double u = t / 65536.0;
+    double v;
+    const double s = BACK_S * 1.525;
+    if (u < 0.5) {
+        v = u * u * ((s + 1) * 2 * u - s) * 2.0 / 2.0;
+        v = (u * u * ((s + 1) * u - s)) * 2.0;
+    } else {
+        v = (u - 1) * (u - 1) * ((s + 1) * (u - 1) + s) + 1.0;
+        v = (v + 1.0) / 2.0;
+    }
+    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * v);
+}
+
+static int32_t anim_path_elastic_in(const lv_anim_t *a) {
+    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    if (t > 65536) t = 65536;
+    double u = t / 65536.0;
+    double v;
+    if (u == 0) v = 0;
+    else if (u == 1) v = 1;
+    else v = -pow(2, 10 * u - 10) * sin((u * 10 - 10.75) * 2 * M_PI / 3);
+    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * v);
+}
+
+static int32_t anim_path_elastic_out(const lv_anim_t *a) {
+    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    if (t > 65536) t = 65536;
+    double u = t / 65536.0;
+    double v;
+    if (u == 0) v = 0;
+    else if (u == 1) v = 1;
+    else v = pow(2, -10 * u) * sin((u * 10 - 0.75) * 2 * M_PI / 3) + 1.0;
+    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * v);
+}
+
+// parametric spring (id 12, used by the animSpring action): underdamped
+// step response of a mass-spring-damper, matching Figma's spring easing
+// x(t) = 1 - e^(-zeta*w0*t) * (cos(wd*t) + ((zeta*w0 - v0)/wd) * sin(wd*t))
+struct SpringAnimState {
+    double stiffness;
+    double damping;
+    double velocity;
+};
+
+static SpringAnimState s_spring_states[16];
+static unsigned s_spring_state_next;
+
+static int32_t anim_path_spring(const lv_anim_t *a) {
+    const SpringAnimState *st = (const SpringAnimState *)lv_anim_get_user_data(a);
+    if (!st || st->stiffness <= 0) {
+        return lv_anim_path_overshoot(a);
+    }
+    double zeta = st->damping / (2.0 * sqrt(st->stiffness));
+    if (zeta >= 1.0) zeta = 0.999;  // keep underdamped so there is always a spring feel
+    double w0 = sqrt(st->stiffness);
+    double wd = w0 * sqrt(1.0 - zeta * zeta);
+    double t = a->act_time / 1000.0;
+    if (t < 0) t = 0;
+    double x = 1.0 - exp(-zeta * w0 * t) *
+                        (cos(wd * t) + ((zeta * w0 - st->velocity) / wd) * sin(wd * t));
+    return a->start_value + (int32_t)((double)(a->end_value - a->start_value) * x);
+}
+
 int32_t (*anim_path_callbacks[])(const lv_anim_t *a) = {
-    lv_anim_path_linear,
-    lv_anim_path_ease_in,
-    lv_anim_path_ease_out,
-    lv_anim_path_ease_in_out,
-    lv_anim_path_overshoot,
-    lv_anim_path_bounce
+    lv_anim_path_linear,      // 0
+    lv_anim_path_ease_in,     // 1
+    lv_anim_path_ease_out,    // 2
+    lv_anim_path_ease_in_out, // 3
+    lv_anim_path_overshoot,   // 4
+    lv_anim_path_bounce,      // 5
+    anim_path_back_in,        // 6
+    anim_path_back_out,       // 7
+    anim_path_back_in_out,    // 8
+    anim_path_elastic_in,     // 9
+    anim_path_elastic_out,    // 10
+    anim_path_spring          // 11 (parametric, see animSpring action)
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1120,6 +1217,61 @@ ACTION_START(animImageAngle)
     playAnimation(obj, start, end, delay, time, relative, instant, path, repeatCount, playback, anim_callback_set_image_angle, anim_callback_get_image_angle);
 ACTION_END
 
+// ---------------------------------------------------------------------------
+// animSpring (IWILLTBEST fork, action id 65): parametric spring animation.
+// Physical spring parameters (stiffness/damping/velocity) travel in the
+// property stream and reach the path callback through the anim user_data.
+// ---------------------------------------------------------------------------
+#define SPRING_PROPS     WIDGET_PROP(obj);     INT32_PROP(start);     INT32_PROP(end);     INT32_PROP(delay);     INT32_PROP(time);     BOOL_PROP(instant);     INT32_PROP(repeatCount);     BOOL_PROP(playback);     INT32_PROP(stiffness);     INT32_PROP(damping);     INT32_PROP(velocity);
+
+static void playAnimationSpring(lv_obj_t *obj,
+    int32_t start,
+    int32_t end,
+    int32_t delay,
+    int32_t time,
+    bool instant,
+    int32_t repeatCount,
+    bool playback,
+    int32_t stiffness,
+    int32_t damping,
+    int32_t velocity,
+    lv_anim_exec_xcb_t set_callback
+) {
+    SpringAnimState *st = &s_spring_states[s_spring_state_next];
+    s_spring_state_next = (s_spring_state_next + 1) % (sizeof(s_spring_states) / sizeof(s_spring_states[0]));
+    st->stiffness = stiffness > 0 ? stiffness : 170;
+    st->damping = damping >= 0 ? damping : 15;
+    st->velocity = velocity;
+
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_time(&anim, time);
+    lv_anim_set_user_data(&anim, st);
+    lv_anim_set_var(&anim, obj);
+    lv_anim_set_exec_cb(&anim, set_callback);
+    lv_anim_set_values(&anim, start, end);
+    lv_anim_set_path_cb(&anim, anim_path_spring);
+    lv_anim_set_delay(&anim, delay);
+    lv_anim_set_early_apply(&anim, instant ? true : false);
+    lv_anim_set_repeat_count(&anim, repeatCount);
+    if (playback) {
+#if LVGL_VERSION_MAJOR >= 9
+        lv_anim_set_playback_duration(&anim, time);
+#endif
+    }
+    lv_anim_start(&anim);
+}
+
+ACTION_START(animSpring)
+    SPRING_PROPS;
+    playAnimationSpring(obj, start, end, delay, time, instant, repeatCount, playback, stiffness, damping, velocity, anim_callback_set_x);
+ACTION_END
+
+ACTION_START(animSpringY)
+    SPRING_PROPS;
+    playAnimationSpring(obj, start, end, delay, time, instant, repeatCount, playback, stiffness, damping, velocity, anim_callback_set_y);
+ACTION_END
+
 ACTION_START(createScreen)
     SCREEN_PROP(screen);
     eez_flow_create_screen(screen);
@@ -1284,7 +1436,9 @@ static ActionType actions[] = {
     /* 61 */ &tabviewGetActiveTab,
     /* 62 */ &arcRotateObjToAngle,
     /* 61 */ &objGetDisplayX,
-    /* 62 */ &objGetDisplayY
+    /* 62 */ &objGetDisplayY,
+    /* 65 */ &animSpring,
+    /* 66 */ &animSpringY
 };
 
 ////////////////////////////////////////////////////////////////////////////////
