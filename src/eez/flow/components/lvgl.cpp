@@ -969,10 +969,10 @@ ACTION_START(objClearFlag)
     lv_obj_clear_flag(obj, (lv_obj_flag_t)flag);
 ACTION_END
 
-// IWILLTBEST fork: animate text_color as an int (0xRRGGBB). With relative
-// set, the animation starts from the object's current color, so any
-// tab-to-tab transition fades from whatever is on screen. The final color
-// persists as a local style (it becomes the new "current color").
+// IWILLTBEST fork: animate text_color as an int (0xRRGGBB). Implemented
+// with a self-managed lv_timer instead of lv_anim: in the 9.4 wasm build
+// the anim machinery corrupted the interpolated values (gray endpoints
+// produced saturated hues mid-flight), so we interpolate manually.
 static void anim_callback_set_text_color(void * var, int32_t v) {
     // clamp to the 0xRRGGBB domain: easing overshoot (or a negative
     // intermediate) would otherwise wrap into a random hue after the mask
@@ -987,6 +987,72 @@ static int32_t read_text_color_hex(lv_obj_t * obj) {
     return ((int32_t)c32.red << 16) | ((int32_t)c32.green << 8) | (int32_t)c32.blue;
 }
 
+struct ColorFadeState {
+    lv_obj_t * obj;
+    int32_t from;
+    int32_t to;
+    uint32_t elapsed;
+    uint32_t duration;
+    bool active;
+};
+
+#define EEZ_COLOR_FADE_MAX 16
+#define EEZ_COLOR_FADE_PERIOD_MS 16
+
+static ColorFadeState s_color_fades[EEZ_COLOR_FADE_MAX];
+static lv_timer_t * s_color_fade_timer;
+
+static void color_fade_timer_cb(lv_timer_t * timer) {
+    (void)timer;
+    bool any_active = false;
+    for (int i = 0; i < EEZ_COLOR_FADE_MAX; i++) {
+        ColorFadeState * st = &s_color_fades[i];
+        if (!st->active) continue;
+        if (st->obj == NULL) { st->active = false; continue; }
+        st->elapsed += EEZ_COLOR_FADE_PERIOD_MS;
+        uint32_t t = st->elapsed >= st->duration ? 0xFFFFFFFF : (uint32_t)((uint64_t)st->elapsed * 0xFFFFFFFF / st->duration);
+        int32_t v = (int32_t)(st->from + (int64_t)((int64_t)st->to - st->from) * (int64_t)(t >> 16) / 0xFFFF);
+        anim_callback_set_text_color(st->obj, v);
+        if (st->elapsed >= st->duration) {
+            anim_callback_set_text_color(st->obj, st->to);
+            st->active = false;
+        } else {
+            any_active = true;
+        }
+    }
+    if (!any_active && s_color_fade_timer) {
+        lv_timer_pause(s_color_fade_timer);
+    }
+}
+
+static void start_color_fade(lv_obj_t * obj, int32_t from, int32_t to, uint32_t duration) {
+    // reuse an existing fade on the same object, else take a free slot
+    ColorFadeState * st = NULL;
+    for (int i = 0; i < EEZ_COLOR_FADE_MAX; i++) {
+        if (s_color_fades[i].active && s_color_fades[i].obj == obj) { st = &s_color_fades[i]; break; }
+    }
+    if (!st) {
+        for (int i = 0; i < EEZ_COLOR_FADE_MAX; i++) {
+            if (!s_color_fades[i].active) { st = &s_color_fades[i]; break; }
+        }
+    }
+    if (!st) return; // no free slot: apply the end value directly
+    st->obj = obj;
+    st->from = from;
+    st->to = to;
+    st->elapsed = 0;
+    st->duration = duration < EEZ_COLOR_FADE_PERIOD_MS ? EEZ_COLOR_FADE_PERIOD_MS : duration;
+    st->active = true;
+
+    if (!s_color_fade_timer) {
+        s_color_fade_timer = lv_timer_create(color_fade_timer_cb, EEZ_COLOR_FADE_PERIOD_MS, NULL);
+    } else {
+        lv_timer_resume(s_color_fade_timer);
+    }
+    // apply the start value immediately
+    anim_callback_set_text_color(obj, from);
+}
+
 static void playAnimationTextColor(lv_obj_t * obj,
     int32_t start,
     int32_t end,
@@ -998,31 +1064,14 @@ static void playAnimationTextColor(lv_obj_t * obj,
     int32_t repeatCount,
     bool playback
 ) {
-    // LVGL 9.4's get_value_cb semantics is OFFSET-ADD (start += current,
-    // end += current), which corrupts absolute color targets. Instead we
-    // read the current color here and use plain absolute values.
+    (void)delay; (void)instant; (void)path; (void)repeatCount; (void)playback;
     if (relative) {
         start = read_text_color_hex(obj);
     }
-
-    lv_anim_t anim;
-    lv_anim_init(&anim);
-    lv_anim_set_time(&anim, time);
-    lv_anim_set_user_data(&anim, obj);
-    lv_anim_set_var(&anim, obj);
-    lv_anim_set_exec_cb(&anim, anim_callback_set_text_color);
-    lv_anim_set_values(&anim, start, end);
-    lv_anim_set_path_cb(&anim, anim_path_callbacks[path]);
-    lv_anim_set_delay(&anim, delay);
-    lv_anim_set_early_apply(&anim, instant ? true : false);
-    lv_anim_set_repeat_count(&anim, repeatCount);
-    if (playback) {
-#if LVGL_VERSION_MAJOR >= 9
-        lv_anim_set_playback_duration(&anim, time);
-#endif
-    }
-    lv_anim_start(&anim);
+    start_color_fade(obj, start, end, (uint32_t)time);
 }
+
+
 
 ACTION_START(animTextColor)
     WIDGET_PROP(obj);
