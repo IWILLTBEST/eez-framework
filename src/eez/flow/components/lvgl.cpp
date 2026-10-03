@@ -993,8 +993,29 @@ struct ColorFadeState {
     int32_t to;
     uint32_t elapsed;
     uint32_t duration;
+    int32_t stiffness;
+    int32_t damping;
+    bool spring;
     bool active;
 };
+
+// spring progress (0..1) for the underdamped step response, same math as
+// anim_path_spring — used so color fades can ride the SAME curve as the
+// position spring (Figma Smart Animate behavior)
+static double spring_progress(uint32_t elapsed_ms, uint32_t duration_ms, int32_t stiffness, int32_t damping) {
+    if (duration_ms == 0) return 1.0;
+    double k = stiffness > 0 ? stiffness : 170;
+    double c = damping >= 0 ? damping : 15;
+    double zeta = c / (2.0 * sqrt(k));
+    if (zeta >= 1.0) zeta = 0.999;
+    double w0 = sqrt(k);
+    double wd = w0 * sqrt(1.0 - zeta * zeta);
+    double t = (double)elapsed_ms / 1000.0;
+    double x = 1.0 - exp(-zeta * w0 * t) * (cos(wd * t) + (zeta * w0 / wd) * sin(wd * t));
+    if (x < 0) x = 0;
+    if (x > 1.2) x = 1.2; // allow overshoot; callers clamp channels anyway
+    return x;
+}
 
 #define EEZ_COLOR_FADE_MAX 16
 #define EEZ_COLOR_FADE_PERIOD_MS 16
@@ -1010,11 +1031,13 @@ static void color_fade_timer_cb(lv_timer_t * timer) {
         if (!st->active) continue;
         if (st->obj == NULL) { st->active = false; continue; }
         st->elapsed += EEZ_COLOR_FADE_PERIOD_MS;
-        uint32_t t = st->elapsed >= st->duration ? 0xFFFFFFFF : (uint32_t)((uint64_t)st->elapsed * 0xFFFFFFFF / st->duration);
         // per-channel interpolation: a packed-RGB integer cannot be
         // interpolated as one number (uneven division/borrows across
         // channels produce random hues)
-        uint32_t f = t >> 16;
+        double x = st->spring
+            ? spring_progress(st->elapsed, st->duration, st->stiffness, st->damping)
+            : (st->elapsed >= st->duration ? 1.0 : (double)st->elapsed / st->duration);
+        uint32_t f = (uint32_t)(x * 0xFFFF);
         int32_t fr = (st->from >> 16) & 0xFF, fgn = (st->from >> 8) & 0xFF, fb = st->from & 0xFF;
         int32_t tr = (st->to >> 16) & 0xFF, tg = (st->to >> 8) & 0xFF, tb = st->to & 0xFF;
         int32_t v = ((fr + (tr - fr) * (int32_t)f / 0xFFFF) << 16) |
@@ -1033,7 +1056,7 @@ static void color_fade_timer_cb(lv_timer_t * timer) {
     }
 }
 
-static void start_color_fade(lv_obj_t * obj, int32_t from, int32_t to, uint32_t duration) {
+static void start_color_fade(lv_obj_t * obj, int32_t from, int32_t to, uint32_t duration, int32_t stiffness, int32_t damping, bool spring) {
     // reuse an existing fade on the same object, else take a free slot
     ColorFadeState * st = NULL;
     for (int i = 0; i < EEZ_COLOR_FADE_MAX; i++) {
@@ -1050,6 +1073,9 @@ static void start_color_fade(lv_obj_t * obj, int32_t from, int32_t to, uint32_t 
     st->to = to;
     st->elapsed = 0;
     st->duration = duration < EEZ_COLOR_FADE_PERIOD_MS ? EEZ_COLOR_FADE_PERIOD_MS : duration;
+    st->stiffness = stiffness;
+    st->damping = damping;
+    st->spring = spring;
     st->active = true;
 
     if (!s_color_fade_timer) {
@@ -1070,13 +1096,18 @@ static void playAnimationTextColor(lv_obj_t * obj,
     bool relative,
     int32_t path,
     int32_t repeatCount,
-    bool playback
+    bool playback,
+    int32_t stiffness,
+    int32_t damping
 ) {
-    (void)delay; (void)instant; (void)path; (void)repeatCount; (void)playback;
+    (void)delay; (void)instant; (void)repeatCount; (void)playback;
     if (relative) {
         start = read_text_color_hex(obj);
     }
-    start_color_fade(obj, start, end, (uint32_t)time);
+    // path 11 = anim_path_spring slot: ride the same spring curve as the
+    // position spring (Figma Smart Animate applies the easing to colors)
+    bool spring = path == 11;
+    start_color_fade(obj, start, end, (uint32_t)time, stiffness, damping, spring);
 }
 
 
@@ -1092,7 +1123,9 @@ ACTION_START(animTextColor)
     INT32_PROP(path);
     INT32_PROP(repeatCount);
     BOOL_PROP(playback);
-    playAnimationTextColor(obj, start, end, delay, time, instant, relative, path, repeatCount, playback);
+    INT32_PROP(stiffness);
+    INT32_PROP(damping);
+    playAnimationTextColor(obj, start, end, delay, time, instant, relative, path, repeatCount, playback, stiffness, damping);
 ACTION_END
 
 ACTION_START(objHasFlag)
