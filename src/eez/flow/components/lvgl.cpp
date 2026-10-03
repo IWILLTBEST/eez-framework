@@ -1011,7 +1011,15 @@ static void color_fade_timer_cb(lv_timer_t * timer) {
         if (st->obj == NULL) { st->active = false; continue; }
         st->elapsed += EEZ_COLOR_FADE_PERIOD_MS;
         uint32_t t = st->elapsed >= st->duration ? 0xFFFFFFFF : (uint32_t)((uint64_t)st->elapsed * 0xFFFFFFFF / st->duration);
-        int32_t v = (int32_t)(st->from + (int64_t)((int64_t)st->to - st->from) * (int64_t)(t >> 16) / 0xFFFF);
+        // per-channel interpolation: a packed-RGB integer cannot be
+        // interpolated as one number (uneven division/borrows across
+        // channels produce random hues)
+        uint32_t f = t >> 16;
+        int32_t fr = (st->from >> 16) & 0xFF, fgn = (st->from >> 8) & 0xFF, fb = st->from & 0xFF;
+        int32_t tr = (st->to >> 16) & 0xFF, tg = (st->to >> 8) & 0xFF, tb = st->to & 0xFF;
+        int32_t v = ((fr + (tr - fr) * (int32_t)f / 0xFFFF) << 16) |
+                    ((fgn + (tg - fgn) * (int32_t)f / 0xFFFF) << 8) |
+                    (fb + (tb - fb) * (int32_t)f / 0xFFFF);
         anim_callback_set_text_color(st->obj, v);
         if (st->elapsed >= st->duration) {
             anim_callback_set_text_color(st->obj, st->to);
