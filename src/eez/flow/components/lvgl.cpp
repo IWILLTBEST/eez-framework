@@ -977,8 +977,9 @@ static void anim_callback_set_text_color(void * var, int32_t v) {
     lv_obj_set_style_text_color((lv_obj_t *)var, lv_color_hex(v & 0xFFFFFF), LV_PART_MAIN);
 }
 
-static int32_t anim_callback_get_text_color(void * var) {
-    lv_color_t c = lv_obj_get_style_text_color((lv_obj_t *)var, LV_PART_MAIN);
+static int32_t anim_callback_get_text_color(lv_anim_t * a) {
+    lv_obj_t * var = (lv_obj_t *)lv_anim_get_user_data(a);
+    lv_color_t c = lv_obj_get_style_text_color(var, LV_PART_MAIN);
     lv_color32_t c32 = lv_color_to_32(c, 0xFF);
     return (c32.red << 16) | (c32.green << 8) | c32.blue;
 }
