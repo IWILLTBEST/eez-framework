@@ -83,7 +83,7 @@ lv_anim_get_value_cb_t anim_get_callbacks[] = {
 #define BACK_S 1.70158
 
 static int32_t anim_path_back_in(const lv_anim_t *a) {
-    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    uint32_t t = a->duration != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->duration) : 65536;
     if (t > 65536) t = 65536;
     double u = t / 65536.0;
     double v = u * u * ((BACK_S + 1) * u - BACK_S);
@@ -91,7 +91,7 @@ static int32_t anim_path_back_in(const lv_anim_t *a) {
 }
 
 static int32_t anim_path_back_out(const lv_anim_t *a) {
-    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    uint32_t t = a->duration != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->duration) : 65536;
     if (t > 65536) t = 65536;
     double u = t / 65536.0;
     double v = (u - 1) * (u - 1) * ((BACK_S + 1) * (u - 1) + BACK_S) + 1.0;
@@ -99,7 +99,7 @@ static int32_t anim_path_back_out(const lv_anim_t *a) {
 }
 
 static int32_t anim_path_back_in_out(const lv_anim_t *a) {
-    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    uint32_t t = a->duration != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->duration) : 65536;
     if (t > 65536) t = 65536;
     double u = t / 65536.0;
     double v;
@@ -115,7 +115,7 @@ static int32_t anim_path_back_in_out(const lv_anim_t *a) {
 }
 
 static int32_t anim_path_elastic_in(const lv_anim_t *a) {
-    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    uint32_t t = a->duration != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->duration) : 65536;
     if (t > 65536) t = 65536;
     double u = t / 65536.0;
     double v;
@@ -126,7 +126,7 @@ static int32_t anim_path_elastic_in(const lv_anim_t *a) {
 }
 
 static int32_t anim_path_elastic_out(const lv_anim_t *a) {
-    uint32_t t = a->time != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->time) : 65536;
+    uint32_t t = a->duration != 0 ? (uint32_t)((uint64_t)a->act_time * 65536 / a->duration) : 65536;
     if (t > 65536) t = 65536;
     double u = t / 65536.0;
     double v;
